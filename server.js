@@ -3,7 +3,7 @@ const snowflake = require('snowflake-sdk');
 const cors = require('cors'); // To avoid CORS issues when communicating with the frontend
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 // Enable CORS to allow frontend (React) to communicate with backend
 app.use(cors());
