@@ -9,167 +9,173 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 
 // Configure Snowflake connection
-const connection = snowflake.createConnection({
-  account: 'ianwqkc-yrb30082',
-  username: 'jobo',
-  password: 'carmel0wore22inH$',
-  warehouse: 'COMPUTE_WH',
-  database: 'CJ_DB',
-  schema: 'WEBAPP_STG',
-  role: 'ACCOUNTADMIN'
-});
+let connection;
+let isConnected = false; // Track the connection status
 
-// Connect to Snowflake
-connection.connect((err, conn) => {
-  if (err) {
-    console.error('Unable to connect to Snowflake:', err);
-  } else {
-    console.log('Successfully connected to Snowflake.');
+function createConnection() {
+  connection = snowflake.createConnection({
+    account: 'ianwqkc-yrb30082',
+    username: 'jobo',
+    password: 'carmel0wore22inH$',
+    warehouse: 'COMPUTE_WH',
+    database: 'CJ_DB',
+    schema: 'WEBAPP_STG',
+    role: 'ACCOUNTADMIN',
+  });
+
+  connection.connect((err, conn) => {
+    if (err) {
+      console.error('Unable to connect to Snowflake:', err.message);
+      isConnected = false;
+    } else {
+      console.log('Successfully connected to Snowflake.');
+      isConnected = true;
+    }
+  });
+
+  connection.on('error', (err) => {
+    console.error('Connection error:', err.message);
+    isConnected = false; // Mark connection as inactive
+    console.log('Reconnecting to Snowflake...');
+    createConnection(); // Recreate the connection
+  });
+}
+
+// Initialize the Snowflake connection
+createConnection();
+
+// Helper function to ensure connection is live before executing queries
+async function executeQuery(query, binds = []) {
+  if (!isConnected) {
+    console.log('Reconnecting to Snowflake...');
+    createConnection();
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for reconnection
   }
-});
 
+  return new Promise((resolve, reject) => {
+    connection.execute({
+      sqlText: query,
+      binds,
+      complete: (err, stmt, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      },
+    });
+  });
+}
 
+// Routes
 app.get('/', (req, res) => {
   res.send('Server is running!');
 });
 
-app.get('/api/spas', (req, res) => {
+app.get('/api/spas', async (req, res) => {
   const query = `
     SELECT * FROM inventory
     WHERE product_type = 'Spa'
   `;
 
-  connection.execute({
-    sqlText: query,
-    complete: (err, stmt, rows) => {
-      if (err) {
-        console.error('Failed to execute query:', err.message);
-        res.status(500).send('Error fetching spa products');
-      } else {
-        res.json(rows); // Send data as JSON response
-      }
-    }
-  });
+  try {
+    const rows = await executeQuery(query);
+    res.json(rows);
+  } catch (err) {
+    console.error('Failed to execute query:', err.message);
+    res.status(500).send('Error fetching spa products');
+  }
 });
 
-
-
-// New route to get a specific spa product by name
-app.get('/api/spas/:productName', (req, res) => {
-  const productName = req.params.productName; // Get productName from URL parameters
-
-  const query = ` 
-    SELECT * FROM inventory
-    WHERE product_name = ?  -- Use ? for binding
-  `;
-
-  connection.execute({
-    sqlText: query,
-    binds: [productName], // Bind the product name as an array
-    complete: (err, stmt, rows) => {
-      if (err) {
-        console.error('Failed to execute query:', err.message);
-        res.status(500).send('Error fetching spa product details');
-      } else if (rows.length === 0) {
-        res.status(404).send('Spa product not found');
-      } else {
-        res.json(rows[0]); // Send the first row as JSON response (single product)
-      }   
-    }   
-  }); 
-});
-
-// Route to get all swim spa products
-app.get('/api/swimspas', (req, res) => {
-  const query = ` 
-    SELECT * FROM inventory
-    WHERE product_type = 'Swim Spa'  -- Adjust this to match your data structure
-  `;
-
-  connection.execute({
-    sqlText: query,
-    complete: (err, stmt, rows) => {
-      if (err) {
-        console.error('Failed to execute query:', err.message);
-        res.status(500).send('Error fetching swim spa products');
-      } else {
-        res.json(rows); // Send data as JSON response
-      }   
-    }   
-  }); 
-});
-
-// New route to get a specific swim spa product by name
-app.get('/api/swimspas/:productName', (req, res) => {
-  const productName = req.params.productName; // Get productName from URL parameters
-
-  const query = ` 
-    SELECT * FROM inventory
-    WHERE product_name = ?  -- Use ? for binding
-  `;
-
-  connection.execute({
-    sqlText: query,
-    binds: [productName], // Bind the product name as an array
-    complete: (err, stmt, rows) => {
-      if (err) {
-        console.error('Failed to execute query:', err.message);
-        res.status(500).send('Error fetching swim spa product details');
-      } else if (rows.length === 0) {
-        res.status(404).send('Swim spa product not found');
-      } else {
-        res.json(rows[0]); // Send the first row as JSON response (single product)
-      }   
-    }   
-  }); 
-});
-
-
-// Route to get all gazebo
-app.get('/api/gazebos', (req, res) => {
+app.get('/api/spas/:productName', async (req, res) => {
+  const productName = req.params.productName;
   const query = `
     SELECT * FROM inventory
-    WHERE product_type = 'Gazebo'  -- Adjust this to match your data structure
+    WHERE product_name = ?
   `;
 
-  connection.execute({
-    sqlText: query,
-    complete: (err, stmt, rows) => {
-      if (err) {
-        console.error('Failed to execute query:', err.message);
-        res.status(500).send('Error fetching swim spa products');
-      } else {
-        res.json(rows); // Send data as JSON response
-      }
+  try {
+    const rows = await executeQuery(query, [productName]);
+    if (rows.length === 0) {
+      res.status(404).send('Spa product not found');
+    } else {
+      res.json(rows[0]);
     }
-  });
+  } catch (err) {
+    console.error('Failed to execute query:', err.message);
+    res.status(500).send('Error fetching spa product details');
+  }
 });
 
-// New route to get a specific swim spa product by name
-app.get('/api/gazebos/:productName', (req, res) => {
-  const productName = req.params.productName; // Get productName from URL parameters
-
+app.get('/api/swimspas', async (req, res) => {
   const query = `
     SELECT * FROM inventory
-    WHERE product_name = ?  -- Use ? for binding
+    WHERE product_type = 'Swim Spa'
   `;
 
-  connection.execute({
-    sqlText: query,
-    binds: [productName], // Bind the product name as an array
-    complete: (err, stmt, rows) => {
-      if (err) {
-        console.error('Failed to execute query:', err.message);
-        res.status(500).send('Error fetching swim spa product details');
-      } else if (rows.length === 0) {
-        res.status(404).send('Swim spa product not found');
-      } else {
-        res.json(rows[0]); // Send the first row as JSON response (single product)
-      }
-    }
-  });
+  try {
+    const rows = await executeQuery(query);
+    res.json(rows);
+  } catch (err) {
+    console.error('Failed to execute query:', err.message);
+    res.status(500).send('Error fetching swim spa products');
+  }
 });
 
+app.get('/api/swimspas/:productName', async (req, res) => {
+  const productName = req.params.productName;
+  const query = `
+    SELECT * FROM inventory
+    WHERE product_name = ?
+  `;
+
+  try {
+    const rows = await executeQuery(query, [productName]);
+    if (rows.length === 0) {
+      res.status(404).send('Swim spa product not found');
+    } else {
+      res.json(rows[0]);
+    }
+  } catch (err) {
+    console.error('Failed to execute query:', err.message);
+    res.status(500).send('Error fetching swim spa product details');
+  }
+});
+
+app.get('/api/gazebos', async (req, res) => {
+  const query = `
+    SELECT * FROM inventory
+    WHERE product_type = 'Gazebo'
+  `;
+
+  try {
+    const rows = await executeQuery(query);
+    res.json(rows);
+  } catch (err) {
+    console.error('Failed to execute query:', err.message);
+    res.status(500).send('Error fetching gazebo products');
+  }
+});
+
+app.get('/api/gazebos/:productName', async (req, res) => {
+  const productName = req.params.productName;
+  const query = `
+    SELECT * FROM inventory
+    WHERE product_name = ?
+  `;
+
+  try {
+    const rows = await executeQuery(query, [productName]);
+    if (rows.length === 0) {
+      res.status(404).send('Gazebo product not found');
+    } else {
+      res.json(rows[0]);
+    }
+  } catch (err) {
+    console.error('Failed to execute query:', err.message);
+    res.status(500).send('Error fetching gazebo product details');
+  }
+});
 
 // Start the server
 app.listen(port, () => {
