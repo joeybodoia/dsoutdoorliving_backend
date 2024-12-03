@@ -5,6 +5,23 @@ const cors = require('cors'); // To avoid CORS issues when communicating with th
 const app = express();
 const port = process.env.PORT || 3001;
 
+
+// Middleware for redirect
+app.use((req, res, next) => {
+  const isHttps = req.headers['x-forwarded-proto'] === 'https';
+  const isRootDomain = req.headers.host === 'ds-outdoorliving.com';
+
+  if (!isHttps) {
+    // Redirect HTTP to HTTPS
+    return res.redirect(301, `https://${req.headers.host}${req.url}`);
+  } else if (isRootDomain) {
+    // Redirect root domain to www subdomain
+    return res.redirect(301, `https://www.ds-outdoorliving.com${req.url}`);
+  }
+  next();
+});
+
+
 // Enable CORS to allow frontend (React) to communicate with backend
 app.use(cors());
 
