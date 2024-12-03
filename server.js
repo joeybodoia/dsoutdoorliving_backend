@@ -10,6 +10,7 @@ const port = process.env.PORT || 3001;
 app.use((req, res, next) => {
   const isHttps = req.headers['x-forwarded-proto'] === 'https';
   const isRootDomain = req.headers.host === 'ds-outdoorliving.com';
+  console.log('req header host = ', req.headers.host)
 
   if (!isHttps) {
     // Redirect HTTP to HTTPS
