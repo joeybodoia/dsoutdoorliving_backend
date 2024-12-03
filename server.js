@@ -12,6 +12,7 @@ app.use(cors());
 let connection;
 let isConnected = false; // Track the connection status
 
+// Function to create a new Snowflake connection
 function createConnection() {
   connection = snowflake.createConnection({
     account: 'ianwqkc-yrb30082',
@@ -41,9 +42,6 @@ function createConnection() {
   });
 }
 
-// Initialize the Snowflake connection
-createConnection();
-
 // Helper function to ensure connection is live before executing queries
 async function executeQuery(query, binds = []) {
   if (!isConnected) {
@@ -66,6 +64,25 @@ async function executeQuery(query, binds = []) {
     });
   });
 }
+
+// Keep the connection alive with periodic lightweight queries
+function startKeepAlive() {
+  setInterval(async () => {
+    if (isConnected) {
+      try {
+        await executeQuery('SELECT 1');
+        console.log('Keep-alive query executed successfully.');
+      } catch (err) {
+        console.error('Keep-alive query failed:', err.message);
+        createConnection(); // Reconnect if the keep-alive query fails
+      }
+    }
+  }, 3600000); // Every 1 hour
+}
+
+// Initialize Snowflake connection and keep-alive logic
+createConnection();
+startKeepAlive();
 
 // Routes
 app.get('/', (req, res) => {
